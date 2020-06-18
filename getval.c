@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "links.h"
 #include "direct.h"
 #include "line.h"
@@ -14,10 +15,12 @@
 
 extern DefInfoT *deflist;
 
-void FatalError(char *str)
+void FatalError(char *str, void *parm)
 {
     PrintFileLine();
-    printf(" - %s\n", str);
+    printf(" - ");
+    printf(str, parm);
+    printf("\n");
     exit(1);
 }
 
@@ -40,7 +43,7 @@ DefInfoT *FindDefine(char *str)
 void CheckEOL(LinkT *tokenlist)
 {
     if (tokenlist) return;
-    FatalError("encountered EOL");
+    FatalError("encountered EOL", 0);
 }
 
 LinkT *SkipBlanksAndComments(LinkT *tokenlist)
@@ -62,6 +65,7 @@ LinkT *SkipBlanksAndComments(LinkT *tokenlist)
 int GetValue(LinkT **ptokenlist)
 {
     int val;
+    DefInfoT *definfo;
     LinkT *tokenlist = SkipBlanksAndComments(*ptokenlist);
     CheckEOL(tokenlist);
     if (!strcmp(tokenlist->str, "!"))
@@ -72,28 +76,35 @@ int GetValue(LinkT **ptokenlist)
     else if (!strcmp(tokenlist->str, "("))
     {
         tokenlist = tokenlist->next;
-        val = !GetVal(&tokenlist, 0);
+        val = GetVal(&tokenlist, 0);
     }
     else if (!strcmp(tokenlist->str, "defined"))
     {
         tokenlist = SkipBlanksAndComments(tokenlist->next);
         CheckEOL(tokenlist);
         if (strcmp(tokenlist->str, "("))
-            FatalError("no opening paren");
+            FatalError("no opening paren - %s", tokenlist->str);
         tokenlist = tokenlist->next;
         CheckEOL(tokenlist);
         val = (FindDefine(tokenlist->str) != 0);
         tokenlist = SkipBlanksAndComments(tokenlist->next);
         CheckEOL(tokenlist);
         if (strcmp(tokenlist->str, ")"))
-            FatalError("no closing paren");
+            FatalError("no closing paren - %s", tokenlist->str);
         tokenlist = tokenlist->next;
     }
-    else
+    else if (isdigit(tokenlist->str[0]))
     {
         val = atoi(tokenlist->str);
         tokenlist = tokenlist->next;
     }
+    else if ((definfo = FindDefine(tokenlist->str)))
+    {
+        LinkT *list = definfo->tokenlist;
+        val = GetVal(&list, 0);
+    }
+    else
+        FatalError("undefined symbol - %s", tokenlist->str);
 
     *ptokenlist = tokenlist;
     return val;
@@ -107,11 +118,11 @@ int GetVal(LinkT **ptokenlist, int prec)
 
     val = GetValue(&tokenlist);
 
-    tokenlist = SkipBlanksAndComments(tokenlist);
-
     // Process <operator> <expression>
     while (tokenlist)
     {
+        tokenlist = SkipBlanksAndComments(tokenlist);
+        if (!tokenlist) break;
         if (!strcmp(tokenlist->str, "||"))
         {
             int this_prec = 4;
@@ -136,13 +147,34 @@ int GetVal(LinkT **ptokenlist, int prec)
             tokenlist = tokenlist->next;
             val = val && GetVal(&tokenlist, this_prec+1);
         }
+        else if (!strcmp(tokenlist->str, "+"))
+        {
+            int this_prec = 12;
+            if (this_prec < prec) break;
+            tokenlist = tokenlist->next;
+            val += GetVal(&tokenlist, this_prec+1);
+        }
+        else if (!strcmp(tokenlist->str, "-"))
+        {
+            int this_prec = 12;
+            if (this_prec < prec) break;
+            tokenlist = tokenlist->next;
+            val -= GetVal(&tokenlist, this_prec+1);
+        }
+        else if (!strcmp(tokenlist->str, "*"))
+        {
+            int this_prec = 13;
+            if (this_prec < prec) break;
+            tokenlist = tokenlist->next;
+            val *= GetVal(&tokenlist, this_prec+1);
+        }
         else if (!strcmp(tokenlist->str, ")"))
         {
             *ptokenlist = tokenlist->next;
             return val;
         }
         else
-            FatalError("invalid operator");
+            FatalError("invalid operator - %s", tokenlist->str);
     }
 
     *ptokenlist = tokenlist;

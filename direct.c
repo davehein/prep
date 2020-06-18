@@ -155,7 +155,7 @@ LinkT *ExpandLine(LinkT *tokenlist)
     while (list)
     {
 	if (++loopcount >= 1000)
-            FatalError("Infinite loop in macro expansion");
+            FatalError("Infinite loop in macro expansion", 0);
 
 	str = list->str;
         // Check for comment
@@ -327,7 +327,7 @@ int ProcessDirective(LinkT *tokenlist)
 
     tokenlist = tokenlist->next;
     if (tokenlist == 0)
-        FatalError("Empty preprocessor directive");
+        FatalError("Empty preprocessor directive", 0);
 
     buffer = tokenlist->str;
     tokenlist = tokenlist->next;
@@ -350,7 +350,7 @@ int ProcessDirective(LinkT *tokenlist)
             LinkT *list = tokenlist;
 
 	    if (*buffer1 == 0)
-                FatalError("#define has no parameters");
+                FatalError("#define has no parameters", 0);
 
 	    // Remove newline from tokenlist
 	    while (list)
